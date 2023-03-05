@@ -8,35 +8,42 @@ import (
 
 var ErrThrottlerCancellation = errors.New("throttler cancellation")
 
-func NewThrottler() *throttler {
-	return &throttler{
+type Throttler interface {
+	Throttle(key interface{}) error
+}
+
+func NewThrottlerFirstEntry(period time.Duration) Throttler {
+	return &throttlerFirstEntry{
+		period:      period,
 		invocations: map[interface{}]time.Time{},
 	}
 }
 
-type throttler struct {
-	mu sync.Mutex
+var _ Throttler = (*throttlerFirstEntry)(nil)
 
+type throttlerFirstEntry struct {
+	period      time.Duration
+	mu          sync.Mutex
 	invocations map[interface{}]time.Time
 }
 
-func (t *throttler) Throttle(key interface{}, period time.Duration) error {
+func (t *throttlerFirstEntry) Throttle(key interface{}) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if last, ok := t.invocations[key]; ok && time.Since(last) < period {
+	if last, ok := t.invocations[key]; ok && time.Since(last) < t.period {
 		return ErrThrottlerCancellation
 	}
 
 	t.invocations[key] = time.Now()
 
-	go t.awaitRemoving(key, period)
+	go t.awaitRemoving(key)
 
 	return nil
 }
 
-func (t *throttler) awaitRemoving(key interface{}, period time.Duration) {
-	time.Sleep(period)
+func (t *throttlerFirstEntry) awaitRemoving(key interface{}) {
+	time.Sleep(t.period)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()

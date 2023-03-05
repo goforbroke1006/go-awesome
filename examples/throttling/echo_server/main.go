@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -12,14 +14,33 @@ import (
 func main() {
 	e := echo.New()
 
-	t := awesome.NewThrottler()
+	throttler := awesome.NewThrottlerFirstEntry(5 * time.Second)
 
-	e.GET("/", func(ctx echo.Context) error {
-		if err := t.Throttle(ctx.Request().URL.Path+"|"+ctx.RealIP(), 5*time.Second); err != nil {
-			return ctx.String(http.StatusTooManyRequests, "Too Many Requests")
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx echo.Context) error {
+			if strings.HasPrefix(ctx.Request().URL.Path, "/api") {
+				if err := throttler.Throttle(ctx.RealIP()); err != nil {
+					fmt.Println("throttle", ctx.RealIP(), time.Now().UTC().Format(time.RFC3339))
+					return ctx.String(http.StatusTooManyRequests, "Too Many Requests")
+				}
+			}
+
+			return next(ctx)
 		}
+	})
 
+	e.GET("/ping", func(ctx echo.Context) error {
+		return ctx.String(http.StatusOK, "pong")
+	})
+	e.GET("/api/hello", func(ctx echo.Context) error {
+		return ctx.String(http.StatusOK, "OK")
+	})
+	e.GET("/api/world", func(ctx echo.Context) error {
 		return ctx.String(http.StatusOK, "OK")
 	})
 	_ = e.Start(":8181")
+
+	// http://localhost:8181/ping
+	// http://localhost:8181/api/hello
+	// http://localhost:8181/api/world
 }
