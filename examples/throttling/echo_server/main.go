@@ -18,7 +18,9 @@ func main() {
 
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(ctx echo.Context) error {
-			if strings.HasPrefix(ctx.Request().URL.Path, "/api") {
+			const throttlingForPrefix = "/api"
+
+			if strings.HasPrefix(ctx.Request().URL.Path, throttlingForPrefix) {
 				if err := throttler.Throttle(ctx.RealIP()); err != nil {
 					fmt.Println("throttle", ctx.RealIP(), time.Now().UTC().Format(time.RFC3339))
 					return ctx.String(http.StatusTooManyRequests, "Too Many Requests")
